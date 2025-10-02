@@ -46,26 +46,48 @@ def load_leaderboard():
         return pd.DataFrame()
 
 def get_leaderboard_stats():
-    """Calculate leaderboard statistics"""
+    """Calculate leaderboard statistics - FIXED to count each quiz session only once"""
     try:
         results_df = pd.read_excel('user_results.xlsx')
         
-        # Calculate scores per quiz session
-        session_stats = results_df.groupby(['User Name', 'Date', 'Exam', 'Section', 'Topic', 'Total Questions']).agg({
+        if results_df.empty:
+            return pd.DataFrame(), pd.DataFrame()
+        
+        # Create a unique session identifier by combining User Name, Date, Exam, Section, Topic
+        results_df['Session_ID'] = results_df['User Name'] + '_' + results_df['Date'] + '_' + results_df['Exam'] + '_' + results_df['Section'] + '_' + results_df['Topic']
+        
+        # Calculate scores per quiz session (group by the unique session)
+        session_stats = results_df.groupby(['Session_ID', 'User Name', 'Date', 'Exam', 'Section', 'Topic', 'Total Questions']).agg({
             'Result (Correct/Wrong)': lambda x: (x == 'Correct').sum()
         }).reset_index()
         
         session_stats.rename(columns={'Result (Correct/Wrong)': 'Score'}, inplace=True)
         
-        # Overall user statistics
-        user_stats = results_df.groupby('User Name').agg({
-            'Result (Correct/Wrong)': lambda x: (x == 'Correct').sum(),
-            'User Name': 'count'
-        }).rename(columns={'Result (Correct/Wrong)': 'Total Correct', 'User Name': 'Total Attempted'})
+        # Remove the temporary Session_ID column
+        session_stats = session_stats.drop('Session_ID', axis=1)
         
-        user_stats['Overall Accuracy'] = (user_stats['Total Correct'] / user_stats['Total Attempted'] * 100).round(2)
+        # Overall user statistics - count unique sessions instead of total questions
+        user_sessions = results_df.groupby(['User Name', 'Session_ID']).agg({
+            'Result (Correct/Wrong)': lambda x: (x == 'Correct').sum(),
+            'Total Questions': 'first'
+        }).reset_index()
+        
+        user_stats = user_sessions.groupby('User Name').agg({
+            'Result (Correct/Wrong)': 'sum',  # Total correct across all sessions
+            'Session_ID': 'count',  # Number of quiz sessions
+            'Total Questions': 'sum'  # Total questions across all sessions
+        }).reset_index()
+        
+        user_stats.rename(columns={
+            'Result (Correct/Wrong)': 'Total Correct',
+            'Session_ID': 'Total Quizzes',
+            'Total Questions': 'Total Questions Attempted'
+        }, inplace=True)
+        
+        user_stats['Overall Accuracy'] = (user_stats['Total Correct'] / user_stats['Total Questions Attempted'] * 100).round(2)
         
         return session_stats, user_stats
+        
     except FileNotFoundError:
         return pd.DataFrame(), pd.DataFrame()
 
@@ -294,7 +316,7 @@ def save_results_data(user_name, exam, section, topic, results):
         st.error("Failed to save results.")
 
 def show_leaderboard():
-    """Display the leaderboard"""
+    """Display the leaderboard - UPDATED with correct counting"""
     st.header("🏆 Leaderboard")
     
     session_stats, user_stats = get_leaderboard_stats()
@@ -303,7 +325,7 @@ def show_leaderboard():
         st.info("No quiz results available yet. Complete a quiz to see leaderboard!")
         return
     
-    # Top Performers (Best Scores)
+    # Top Performers (Best Scores) - now correctly shows each quiz session once
     st.subheader("Top Performers (Best Scores)")
     top_scores = session_stats.nlargest(10, 'Score')[['User Name', 'Exam', 'Section', 'Topic', 'Score', 'Total Questions', 'Date']]
     top_scores['Percentage'] = (top_scores['Score'] / top_scores['Total Questions'] * 100).round(1)
@@ -313,19 +335,20 @@ def show_leaderboard():
     else:
         st.info("No top scores available.")
     
-    # Overall User Statistics
+    # Overall User Statistics - now shows correct quiz count
     st.subheader("Overall User Statistics")
     if not user_stats.empty:
-        overall_stats = user_stats.reset_index()[['User Name', 'Total Correct', 'Total Attempted', 'Overall Accuracy']]
+        # Reorder columns for better display
+        overall_stats = user_stats[['User Name', 'Total Quizzes', 'Total Correct', 'Total Questions Attempted', 'Overall Accuracy']]
         st.dataframe(overall_stats, use_container_width=True)
     else:
         st.info("No user statistics available.")
     
-    # Recent Attempts
+    # Recent Attempts - now shows each quiz session once
     st.subheader("Recent Attempts")
     recent_attempts = session_stats.sort_values('Date', ascending=False).head(10)
     recent_attempts['Percentage'] = (recent_attempts['Score'] / recent_attempts['Total Questions'] * 100).round(1)
-    st.dataframe(recent_attempts[['User Name', 'Exam', 'Section', 'Topic', 'Score', 'Percentage', 'Date']], 
+    st.dataframe(recent_attempts[['User Name', 'Exam', 'Section', 'Topic', 'Score', 'Total Questions', 'Percentage', 'Date']], 
                  use_container_width=True)
 
 def main():
