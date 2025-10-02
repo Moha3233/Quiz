@@ -37,14 +37,6 @@ def save_results(results_data):
         st.error(f"Error saving results: {e}")
         return False
 
-def load_leaderboard():
-    """Load leaderboard data"""
-    try:
-        leaderboard_df = pd.read_excel('user_results.xlsx')
-        return leaderboard_df
-    except FileNotFoundError:
-        return pd.DataFrame()
-
 def get_leaderboard_stats():
     """Calculate leaderboard statistics - PROPERLY GROUPED BY QUIZ SESSIONS"""
     try:
@@ -102,7 +94,7 @@ def get_leaderboard_stats():
         return pd.DataFrame(), pd.DataFrame()
 
 def show_leaderboard():
-    """Display the leaderboard - FIXED COUNTING"""
+    """Display the leaderboard - SINGLE CORRECT VERSION"""
     st.header("🏆 Leaderboard")
     
     session_stats, user_stats = get_leaderboard_stats()
@@ -155,154 +147,6 @@ def show_leaderboard():
     else:
         st.info("No recent attempts available.")
 
-def show_leaderboard():
-    """Display the leaderboard - COMPLETELY FIXED"""
-    st.header("🏆 Leaderboard")
-    
-    try:
-        session_stats, user_stats = get_leaderboard_stats()
-        
-        if session_stats.empty or user_stats.empty:
-            st.info("No quiz results available yet. Complete a quiz to see leaderboard!")
-            return
-        
-        # Debug information
-        st.sidebar.write("Sessions found:", len(session_stats))
-        st.sidebar.write("Users found:", len(user_stats))
-        
-        # Top Performers Section
-        st.subheader("🏅 Top Performers (Best Scores)")
-        
-        # Ensure we have the required columns
-        if all(col in session_stats.columns for col in ['User Name', 'Exam', 'Section', 'Topic', 'Score', 'Total Questions', 'Date']):
-            # Calculate percentage for each session
-            session_stats['Percentage'] = (session_stats['Score'] / session_stats['Total Questions'] * 100).round(1)
-            
-            # Get top 10 scores by percentage
-            top_scores = session_stats.nlargest(10, 'Percentage')[['User Name', 'Exam', 'Section', 'Topic', 'Score', 'Total Questions', 'Percentage', 'Date']]
-            
-            if not top_scores.empty:
-                # Format the display
-                display_top_scores = top_scores.copy()
-                display_top_scores['Score'] = display_top_scores['Score'].astype(str) + '/' + display_top_scores['Total Questions'].astype(str)
-                display_top_scores = display_top_scores.rename(columns={'Score': 'Score (Correct/Total)'})
-                st.dataframe(display_top_scores[['User Name', 'Exam', 'Section', 'Topic', 'Score (Correct/Total)', 'Percentage', 'Date']], 
-                           use_container_width=True)
-            else:
-                st.info("No top scores available.")
-        else:
-            st.error("Missing required columns in session data")
-        
-        # Overall User Statistics Section
-        st.subheader("📊 Overall User Statistics")
-        
-        if not user_stats.empty and all(col in user_stats.columns for col in ['User Name', 'Total Quizzes', 'Total Correct', 'Total Questions Attempted', 'Overall Accuracy']):
-            # Format the display
-            display_user_stats = user_stats.copy()
-            display_user_stats['Total Correct'] = display_user_stats['Total Correct'].astype(int)
-            display_user_stats['Total Questions Attempted'] = display_user_stats['Total Questions Attempted'].astype(int)
-            display_user_stats['Overall Accuracy'] = display_user_stats['Overall Accuracy'].round(1)
-            
-            st.dataframe(display_user_stats[['User Name', 'Total Quizzes', 'Total Correct', 'Total Questions Attempted', 'Overall Accuracy']], 
-                       use_container_width=True)
-        else:
-            st.error("Missing required columns in user statistics")
-        
-        # Recent Attempts Section
-        st.subheader("🕒 Recent Attempts")
-        
-        if not session_stats.empty and all(col in session_stats.columns for col in ['User Name', 'Exam', 'Section', 'Topic', 'Score', 'Total Questions', 'Percentage', 'Date']):
-            # Get most recent attempts
-            recent_attempts = session_stats.sort_values('Date', ascending=False).head(10)
-            
-            # Format the display
-            display_recent = recent_attempts.copy()
-            display_recent['Score'] = display_recent['Score'].astype(str) + '/' + display_recent['Total Questions'].astype(str)
-            display_recent = display_recent.rename(columns={'Score': 'Score (Correct/Total)'})
-            
-            st.dataframe(display_recent[['User Name', 'Exam', 'Section', 'Topic', 'Score (Correct/Total)', 'Percentage', 'Date']], 
-                       use_container_width=True)
-        else:
-            st.error("Missing required columns in recent attempts data")
-            
-    except Exception as e:
-        st.error(f"Error displaying leaderboard: {e}")
-        st.info("Please try completing a quiz first to generate leaderboard data.")
-
-def show_leaderboard():
-    """Display the leaderboard - COMPLETELY FIXED"""
-    st.header("🏆 Leaderboard")
-    
-    try:
-        session_stats, user_stats = get_leaderboard_stats()
-        
-        if session_stats.empty or user_stats.empty:
-            st.info("No quiz results available yet. Complete a quiz to see leaderboard!")
-            return
-        
-        # Debug information
-        st.sidebar.write("Sessions found:", len(session_stats))
-        st.sidebar.write("Users found:", len(user_stats))
-        
-        # Top Performers Section
-        st.subheader("🏅 Top Performers (Best Scores)")
-        
-        # Ensure we have the required columns
-        if all(col in session_stats.columns for col in ['User Name', 'Exam', 'Section', 'Topic', 'Score', 'Total Questions', 'Date']):
-            # Calculate percentage for each session
-            session_stats['Percentage'] = (session_stats['Score'] / session_stats['Total Questions'] * 100).round(1)
-            
-            # Get top 10 scores by percentage
-            top_scores = session_stats.nlargest(10, 'Percentage')[['User Name', 'Exam', 'Section', 'Topic', 'Score', 'Total Questions', 'Percentage', 'Date']]
-            
-            if not top_scores.empty:
-                # Format the display
-                display_top_scores = top_scores.copy()
-                display_top_scores['Score'] = display_top_scores['Score'].astype(str) + '/' + display_top_scores['Total Questions'].astype(str)
-                display_top_scores = display_top_scores.rename(columns={'Score': 'Score (Correct/Total)'})
-                st.dataframe(display_top_scores[['User Name', 'Exam', 'Section', 'Topic', 'Score (Correct/Total)', 'Percentage', 'Date']], 
-                           use_container_width=True)
-            else:
-                st.info("No top scores available.")
-        else:
-            st.error("Missing required columns in session data")
-        
-        # Overall User Statistics Section
-        st.subheader("📊 Overall User Statistics")
-        
-        if not user_stats.empty and all(col in user_stats.columns for col in ['User Name', 'Total Quizzes', 'Total Correct', 'Total Questions Attempted', 'Overall Accuracy']):
-            # Format the display
-            display_user_stats = user_stats.copy()
-            display_user_stats['Total Correct'] = display_user_stats['Total Correct'].astype(int)
-            display_user_stats['Total Questions Attempted'] = display_user_stats['Total Questions Attempted'].astype(int)
-            display_user_stats['Overall Accuracy'] = display_user_stats['Overall Accuracy'].round(1)
-            
-            st.dataframe(display_user_stats[['User Name', 'Total Quizzes', 'Total Correct', 'Total Questions Attempted', 'Overall Accuracy']], 
-                       use_container_width=True)
-        else:
-            st.error("Missing required columns in user statistics")
-        
-        # Recent Attempts Section
-        st.subheader("🕒 Recent Attempts")
-        
-        if not session_stats.empty and all(col in session_stats.columns for col in ['User Name', 'Exam', 'Section', 'Topic', 'Score', 'Total Questions', 'Percentage', 'Date']):
-            # Get most recent attempts
-            recent_attempts = session_stats.sort_values('Date', ascending=False).head(10)
-            
-            # Format the display
-            display_recent = recent_attempts.copy()
-            display_recent['Score'] = display_recent['Score'].astype(str) + '/' + display_recent['Total Questions'].astype(str)
-            display_recent = display_recent.rename(columns={'Score': 'Score (Correct/Total)'})
-            
-            st.dataframe(display_recent[['User Name', 'Exam', 'Section', 'Topic', 'Score (Correct/Total)', 'Percentage', 'Date']], 
-                       use_container_width=True)
-        else:
-            st.error("Missing required columns in recent attempts data")
-            
-    except Exception as e:
-        st.error(f"Error displaying leaderboard: {e}")
-        st.info("Please try completing a quiz first to generate leaderboard data.")
-
 def initialize_session_state():
     """Initialize session state variables"""
     default_states = {
@@ -318,7 +162,9 @@ def initialize_session_state():
         'user_name': '',
         'current_exam': '',
         'current_section': '',
-        'current_topic': ''
+        'current_topic': '',
+        'total_questions': 10,  # Added missing variables
+        'time_limit': 10        # Added missing variables
     }
     
     for key, value in default_states.items():
@@ -352,6 +198,8 @@ def start_quiz(exam, section, topic, df, user_name):
     st.session_state.current_exam = exam
     st.session_state.current_section = section
     st.session_state.current_topic = topic
+    st.session_state.total_questions = 10  # Set explicitly
+    st.session_state.time_limit = 10       # Set explicitly
     
     return True
 
@@ -470,7 +318,6 @@ def calculate_results():
 def display_scorecard(results, user_name, exam, section, topic):
     """Display the scorecard after quiz completion"""
     st.success("🎉 Quiz Completed!")
-    st.balloons()
     
     # Summary metrics
     col1, col2, col3, col4, col5, col6 = st.columns(6)
@@ -503,7 +350,7 @@ def display_scorecard(results, user_name, exam, section, topic):
     save_results_data(user_name, exam, section, topic, results)
 
 def save_results_data(user_name, exam, section, topic, results):
-    """Prepare and save results data - ensure consistent format"""
+    """Prepare and save results data"""
     results_data = []
     
     for idx, row in results['results_df'].iterrows():
@@ -532,42 +379,6 @@ def save_results_data(user_name, exam, section, topic, results):
     else:
         st.error("❌ Failed to save results.")
         return False
-
-def show_leaderboard():
-    """Display the leaderboard - UPDATED with correct counting"""
-    st.header("🏆 Leaderboard")
-    
-    session_stats, user_stats = get_leaderboard_stats()
-    
-    if session_stats.empty:
-        st.info("No quiz results available yet. Complete a quiz to see leaderboard!")
-        return
-    
-    # Top Performers (Best Scores) - now correctly shows each quiz session once
-    st.subheader("Top Performers (Best Scores)")
-    top_scores = session_stats.nlargest(10, 'Score')[['User Name', 'Exam', 'Section', 'Topic', 'Score', 'Total Questions', 'Date']]
-    top_scores['Percentage'] = (top_scores['Score'] / top_scores['Total Questions'] * 100).round(1)
-    
-    if not top_scores.empty:
-        st.dataframe(top_scores, use_container_width=True)
-    else:
-        st.info("No top scores available.")
-    
-    # Overall User Statistics - now shows correct quiz count
-    st.subheader("Overall User Statistics")
-    if not user_stats.empty:
-        # Reorder columns for better display
-        overall_stats = user_stats[['User Name', 'Total Quizzes', 'Total Correct', 'Total Questions Attempted', 'Overall Accuracy']]
-        st.dataframe(overall_stats, use_container_width=True)
-    else:
-        st.info("No user statistics available.")
-    
-    # Recent Attempts - now shows each quiz session once
-    st.subheader("Recent Attempts")
-    recent_attempts = session_stats.sort_values('Date', ascending=False).head(10)
-    recent_attempts['Percentage'] = (recent_attempts['Score'] / recent_attempts['Total Questions'] * 100).round(1)
-    st.dataframe(recent_attempts[['User Name', 'Exam', 'Section', 'Topic', 'Score', 'Total Questions', 'Percentage', 'Date']], 
-                 use_container_width=True)
 
 def main():
     st.title("📚 MCQ Quiz Application")
@@ -626,7 +437,7 @@ def main():
             if st.button("Start Quiz", type="primary"):
                 if start_quiz(selected_exam, selected_section, selected_topic, df, user_name):
                     st.rerun()
-        
+    
     # Quiz interface
     else:
         st.header("MCQ Quiz")
