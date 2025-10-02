@@ -84,19 +84,13 @@ def load_leaderboard_data():
     """Load leaderboard data from results file"""
     try:
         df = pd.read_excel('user_results.xlsx')
-        
-        # Convert Date column to datetime if it exists
-        if 'Date' in df.columns:
-            df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
-            # Drop rows where date conversion failed
-            df = df.dropna(subset=['Date'])
-        
         return df
     except FileNotFoundError:
-        return pd.DataFrame()  # Return empty DataFrame instead of None
+        st.info("No quiz results found yet. Complete a quiz to see leaderboard!")
+        return None
     except Exception as e:
         st.error(f"Error loading leaderboard data: {e}")
-        return pd.DataFrame()
+        return None
 
 def get_available_notes():
     """Get list of available PDF notes in the notes directory"""
@@ -202,30 +196,36 @@ def display_leaderboard():
         else:  # Last 90 Days
             cutoff_date = datetime.now() - timedelta(days=90)
         
-        # Ensure Date column is datetime and filter
+        filtered_df['Date'] = pd.to_datetime(filtered_df['Date'])
         filtered_df = filtered_df[filtered_df['Date'] >= cutoff_date]
     
     # Calculate leaderboard
     if not filtered_df.empty:
-        # Get best attempt per user (based on score percentage)
-        best_attempts = filtered_df.loc[filtered_df.groupby('User Name')['Score Percentage'].idxmax()]
+        # Get unique attempts (user + date combinations)
+        attempts = filtered_df.groupby(['User Name', 'Date']).agg({
+            'Total Questions': 'first',
+            'Score Percentage': 'first'
+        }).reset_index()
         
         # Filter by minimum questions
-        best_attempts = best_attempts[best_attempts['Total Questions'] >= min_questions]
+        attempts = attempts[attempts['Total Questions'] >= min_questions]
         
-        if best_attempts.empty:
+        if attempts.empty:
             st.warning("No results match the current filters.")
             return
         
-        # Create leaderboard
-        leaderboard = best_attempts[['User Name', 'Score Percentage', 'Total Questions']].copy()
+        # Get best score per user
+        leaderboard = attempts.groupby('User Name').agg({
+            'Score Percentage': 'max',
+            'Total Questions': 'mean',
+            'Date': 'count'
+        }).reset_index()
         
-        # Count attempts per user
-        attempt_counts = filtered_df.groupby('User Name').size().reset_index(name='Attempts')
-        leaderboard = leaderboard.merge(attempt_counts, on='User Name', how='left')
+        leaderboard.columns = ['User Name', 'Best Score (%)', 'Avg Questions', 'Attempts']
+        leaderboard['Avg Questions'] = leaderboard['Avg Questions'].round(1)
         
         # Sort by best score
-        leaderboard = leaderboard.sort_values('Score Percentage', ascending=False).reset_index(drop=True)
+        leaderboard = leaderboard.sort_values('Best Score (%)', ascending=False).reset_index(drop=True)
         leaderboard['Rank'] = leaderboard.index + 1
         
         # Display leaderboard
@@ -236,22 +236,22 @@ def display_leaderboard():
             top1 = leaderboard.iloc[0]
             col1, col2, col3 = st.columns(3)
             with col1:
-                st.metric("🥇 1st Place", f"{top1['User Name']}", f"{top1['Score Percentage']:.1f}%")
+                st.metric("🥇 1st Place", f"{top1['User Name']}", f"{top1['Best Score (%)']:.1f}%")
             if len(leaderboard) >= 2:
                 top2 = leaderboard.iloc[1]
                 with col2:
-                    st.metric("🥈 2nd Place", f"{top2['User Name']}", f"{top2['Score Percentage']:.1f}%")
+                    st.metric("🥈 2nd Place", f"{top2['User Name']}", f"{top2['Best Score (%)']:.1f}%")
             if len(leaderboard) >= 3:
                 top3 = leaderboard.iloc[2]
                 with col3:
-                    st.metric("🥉 3rd Place", f"{top3['User Name']}", f"{top3['Score Percentage']:.1f}%")
+                    st.metric("🥉 3rd Place", f"{top3['User Name']}", f"{top3['Best Score (%)']:.1f}%")
         
         # Detailed leaderboard table
         st.subheader("Detailed Leaderboard")
         
         # Format the leaderboard display
-        display_df = leaderboard[['Rank', 'User Name', 'Score Percentage', 'Total Questions', 'Attempts']].copy()
-        display_df['Score Percentage'] = display_df['Score Percentage'].round(1)
+        display_df = leaderboard[['Rank', 'User Name', 'Best Score (%)', 'Avg Questions', 'Attempts']].copy()
+        display_df['Best Score (%)'] = display_df['Best Score (%)'].round(1)
         
         # Add medal emojis for top 3
         def add_medal_emoji(rank):
@@ -265,7 +265,7 @@ def display_leaderboard():
                 return ""
         
         display_df['Medal'] = display_df['Rank'].apply(add_medal_emoji)
-        display_df = display_df[['Rank', 'Medal', 'User Name', 'Score Percentage', 'Total Questions', 'Attempts']]
+        display_df = display_df[['Rank', 'Medal', 'User Name', 'Best Score (%)', 'Avg Questions', 'Attempts']]
         
         st.dataframe(display_df, use_container_width=True)
         
@@ -276,30 +276,18 @@ def display_leaderboard():
         with col1:
             st.metric("Total Participants", len(leaderboard))
         with col2:
-            st.metric("Average Score", f"{leaderboard['Score Percentage'].mean():.1f}%")
+            st.metric("Average Score", f"{leaderboard['Best Score (%)'].mean():.1f}%")
         with col3:
-            st.metric("Highest Score", f"{leaderboard['Score Percentage'].max():.1f}%")
+            st.metric("Highest Score", f"{leaderboard['Best Score (%)'].max():.1f}%")
         with col4:
-            st.metric("Lowest Score", f"{leaderboard['Score Percentage'].min():.1f}%")
+            st.metric("Lowest Score", f"{leaderboard['Best Score (%)'].min():.1f}%")
         
         # Recent attempts
         st.subheader("Recent Attempts")
-        recent_attempts = filtered_df.sort_values('Date', ascending=False).head(10)
+        recent_attempts = attempts.sort_values('Date', ascending=False).head(10)
         recent_display = recent_attempts[['User Name', 'Date', 'Total Questions', 'Score Percentage']].copy()
         recent_display['Score Percentage'] = recent_display['Score Percentage'].round(1)
-        
-        # Safe date formatting
-        if 'Date' in recent_display.columns:
-            try:
-                # Convert to string format safely
-                recent_display['Date'] = recent_display['Date'].apply(
-                    lambda x: x.strftime('%Y-%m-%d %H:%M') if pd.notnull(x) else 'Unknown'
-                )
-            except Exception as e:
-                st.warning(f"Could not format dates: {e}")
-                # If formatting fails, keep original dates
-                recent_display['Date'] = recent_display['Date'].astype(str)
-        
+        recent_display['Date'] = recent_display['Date'].dt.strftime('%Y-%m-%d %H:%M')
         st.dataframe(recent_display, use_container_width=True)
         
     else:
@@ -322,8 +310,7 @@ def initialize_session_state():
         'current_topic': "",
         'total_questions': 0,
         'time_limit': 0,
-        'quiz_completed': False,
-        'results_calculated': False
+        'quiz_completed': False
     }
     
     for key, value in default_state.items():
@@ -367,7 +354,6 @@ def start_quiz(exam, section, topic, df, user_name, num_questions):
         st.session_state.total_questions = num_questions
         st.session_state.time_limit = num_questions  # 1 minute per question
         st.session_state.quiz_completed = False
-        st.session_state.results_calculated = False
         
         return True
     except Exception as e:
@@ -393,7 +379,7 @@ def display_question(question_data, question_num):
     ]
     
     # Create radio buttons for options
-    answer_key = f"q_{question_data['Id']}_{question_num}"
+    answer_key = f"q_{question_data['Id']}"
     current_answer = st.session_state.user_answers.get(question_data['Id'], None)
     
     # Get the index of current answer for the radio button
@@ -410,6 +396,8 @@ def display_question(question_data, question_num):
     # Save answer immediately when selected
     if user_answer and user_answer != current_answer:
         st.session_state.user_answers[question_data['Id']] = user_answer
+        # Small delay to allow UI to update
+        time.sleep(0.1)
     
     return user_answer
 
@@ -455,7 +443,7 @@ def display_timer():
         if remaining_time <= 0:
             st.session_state.time_up = True
             st.error("⏰ Time's up! Auto-submitting your quiz...")
-            st.session_state.quiz_completed = True
+            time.sleep(2)
             st.rerun()
         else:
             minutes = int(remaining_time // 60)
@@ -470,7 +458,7 @@ def display_timer():
             
             # Progress bar for time
             progress = elapsed_time / (st.session_state.time_limit * 60)
-            st.progress(min(progress, 1.0))
+            st.progress(progress)
             
             st.markdown(
                 f"<h3 style='color: {color}; text-align: center;'>"
@@ -482,10 +470,6 @@ def display_timer():
 def calculate_results():
     """Calculate and return quiz results"""
     try:
-        if st.session_state.quiz_questions is None:
-            st.error("No quiz questions found.")
-            return None
-            
         questions_df = st.session_state.quiz_questions
         user_answers = st.session_state.user_answers
         
@@ -564,7 +548,6 @@ def display_scorecard(results):
     # Save results
     if save_results_data(results):
         st.success("Results saved successfully!")
-        st.session_state.results_calculated = True
     else:
         st.error("Failed to save results.")
 
@@ -572,21 +555,23 @@ def save_results_data(results):
     """Prepare and save results data"""
     try:
         results_data = []
-        current_time = datetime.now()
         
-        # Create a single record for this quiz attempt
-        results_data.append({
-            'User Name': st.session_state.user_name,
-            'Date': current_time.strftime('%Y-%m-%d %H:%M:%S'),
-            'Exam': st.session_state.current_exam,
-            'Section': st.session_state.current_section,
-            'Topic': st.session_state.current_topic,
-            'Total Questions': st.session_state.total_questions,
-            'Score Percentage': results['score_percentage'],
-            'Correct Answers': results['correct'],
-            'Incorrect Answers': results['incorrect'],
-            'Not Attempted': results['not_attempted']
-        })
+        for idx, row in results['results_df'].iterrows():
+            question_data = st.session_state.quiz_questions.iloc[idx]
+            results_data.append({
+                'User Name': st.session_state.user_name,
+                'Date': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                'Exam': st.session_state.current_exam,
+                'Section': st.session_state.current_section,
+                'Topic': st.session_state.current_topic,
+                'Total Questions': st.session_state.total_questions,
+                'Question ID': question_data['Id'],
+                'Question': question_data['Question'],
+                'User Answer': row['User Answer'],
+                'Correct Answer': row['Correct Answer'],
+                'Result': row['Result'],
+                'Score Percentage': results['score_percentage']
+            })
         
         results_df = pd.DataFrame(results_data)
         return save_results(results_df)
@@ -596,12 +581,8 @@ def save_results_data(results):
 
 def reset_quiz():
     """Reset the quiz state"""
-    keys_to_keep = ['user_name']  # Keep user name for convenience
-    keys_to_delete = [key for key in st.session_state.keys() if key not in keys_to_keep]
-    
-    for key in keys_to_delete:
+    for key in list(st.session_state.keys()):
         del st.session_state[key]
-    
     st.rerun()
 
 def main():
@@ -702,13 +683,8 @@ def main():
         
         # Check if time is up or quiz completed
         if st.session_state.time_up or st.session_state.quiz_completed:
-            if not st.session_state.results_calculated:
-                results = calculate_results()
-                if results:
-                    display_scorecard(results)
-            else:
-                st.info("Quiz already submitted. Click 'Start New Quiz' to begin a new one.")
-            
+            results = calculate_results()
+            display_scorecard(results)
             if st.button("Start New Quiz", type="primary"):
                 reset_quiz()
             return
