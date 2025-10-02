@@ -84,6 +84,13 @@ def load_leaderboard_data():
     """Load leaderboard data from results file"""
     try:
         df = pd.read_excel('user_results.xlsx')
+        
+        # Convert Date column to datetime if it exists
+        if 'Date' in df.columns:
+            df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
+            # Drop rows where date conversion failed
+            df = df.dropna(subset=['Date'])
+        
         return df
     except FileNotFoundError:
         st.info("No quiz results found yet. Complete a quiz to see leaderboard!")
@@ -196,7 +203,7 @@ def display_leaderboard():
         else:  # Last 90 Days
             cutoff_date = datetime.now() - timedelta(days=90)
         
-        filtered_df['Date'] = pd.to_datetime(filtered_df['Date'])
+        # Ensure Date column is datetime and filter
         filtered_df = filtered_df[filtered_df['Date'] >= cutoff_date]
     
     # Calculate leaderboard
@@ -287,7 +294,19 @@ def display_leaderboard():
         recent_attempts = attempts.sort_values('Date', ascending=False).head(10)
         recent_display = recent_attempts[['User Name', 'Date', 'Total Questions', 'Score Percentage']].copy()
         recent_display['Score Percentage'] = recent_display['Score Percentage'].round(1)
-        recent_display['Date'] = recent_display['Date'].dt.strftime('%Y-%m-%d %H:%M')
+        
+        # Safe date formatting
+        if 'Date' in recent_display.columns:
+            try:
+                # Convert to string format safely
+                recent_display['Date'] = recent_display['Date'].apply(
+                    lambda x: x.strftime('%Y-%m-%d %H:%M') if pd.notnull(x) else 'Unknown'
+                )
+            except Exception as e:
+                st.warning(f"Could not format dates: {e}")
+                # If formatting fails, keep original dates
+                recent_display['Date'] = recent_display['Date'].astype(str)
+        
         st.dataframe(recent_display, use_container_width=True)
         
     else:
@@ -396,8 +415,6 @@ def display_question(question_data, question_num):
     # Save answer immediately when selected
     if user_answer and user_answer != current_answer:
         st.session_state.user_answers[question_data['Id']] = user_answer
-        # Small delay to allow UI to update
-        time.sleep(0.1)
     
     return user_answer
 
